@@ -13,3 +13,5 @@ Fast and standard charging modes
 Simple and intuitive interface
 
 Tech Stack: Python | Flask/Django | React Native/Flutter | Chart.js/matplotlib
+
+Making a app for this code in a month.
