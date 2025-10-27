@@ -15,7 +15,7 @@ class EVChargingCalculator:
         
         # Değişkenler
         self.battery_capacity = tk.DoubleVar(value=75.0)
-        self.current_charge = tk.DoubleVar(value=20.0)
+        self.current_charge_percent = tk.DoubleVar(value=20.0)  # Yüzde olarak
         self.charging_speed = tk.StringVar(value="50.0")
         
         # Özel araçlar listesi
@@ -184,21 +184,21 @@ class EVChargingCalculator:
         )
         controls_title.pack(pady=15)
         
-        # Batarya Kapasitesi
+        # Batarya Kapasitesi (1'er 1'er artacak)
         self.create_slider_section(
             right_panel,
             "🔋 Batarya Kapasitesi (kWh)",
             self.battery_capacity,
-            30, 150, 5,
+            30, 150, 1,
             "#4ecca3"
         )
         
-        # Mevcut Şarj
+        # Mevcut Şarj (Yüzde olarak)
         self.create_slider_section(
             right_panel,
-            "📊 Mevcut Şarj (kWh)",
-            self.current_charge,
-            0, 150, 1,
+            "📊 Mevcut Şarj (%)",
+            self.current_charge_percent,
+            0, 100, 1,
             "#ffd93d"
         )
         
@@ -404,10 +404,10 @@ class EVChargingCalculator:
         )
         self.vehicle_capacity_entry.pack(fill="x", ipady=8, pady=5)
         
-        # Varsayılan Şarj
+        # Varsayılan Şarj (Yüzde olarak)
         tk.Label(
             form_frame,
-            text="Varsayılan Şarj (kWh):",
+            text="Varsayılan Şarj (%):",
             font=("Helvetica", 11, "bold"),
             bg="#16213e",
             fg="white",
@@ -547,21 +547,21 @@ class EVChargingCalculator:
         try:
             name = self.vehicle_name_entry.get().strip()
             capacity = float(self.vehicle_capacity_entry.get())
-            charge = float(self.vehicle_charge_entry.get())
+            charge_percent = float(self.vehicle_charge_entry.get())
             speed = float(self.vehicle_speed_entry.get())
             
             if not name:
                 messagebox.showwarning("Uyarı", "Lütfen araç adı girin!")
                 return
             
-            if capacity <= 0 or charge < 0 or speed <= 0:
+            if capacity <= 0 or charge_percent < 0 or charge_percent > 100 or speed <= 0:
                 messagebox.showwarning("Uyarı", "Lütfen geçerli değerler girin!")
                 return
             
             vehicle = {
                 "name": name,
                 "capacity": capacity,
-                "charge": charge,
+                "charge_percent": charge_percent,
                 "speed": speed
             }
             
@@ -604,29 +604,40 @@ class EVChargingCalculator:
         for widget in self.button_frame.winfo_children():
             widget.destroy()
         
-        # Varsayılan araçlar
+        # Varsayılan araçlar (yüzde olarak)
         default_vehicles = [
-            ("Tesla Model Y SR", 62.5, 20, "62.5"),
-            ("VW ID.4", 52, 25, "52"),
-            ("Togg T10X", 52.4, 15, "52.4"),
+            ("Tesla Model Y SR", 62.5, 30, "62.5"),
+            ("VW ID.4", 52, 50, "52"),
+            ("Togg T10X", 52.4, 25, "52.4"),
         ]
         
+        # Özel araçları ekle (eski ve yeni formatı destekle)
+        custom_vehicle_list = []
+        for v in self.custom_vehicles:
+            # Eğer charge_percent varsa onu kullan, yoksa charge'ı yüzdeye çevir
+            if 'charge_percent' in v:
+                charge_percent = v['charge_percent']
+            else:
+                # Eski format: kWh cinsinden, yüzdeye çevir
+                charge_percent = (v.get('charge', 20) / v['capacity']) * 100
+            
+            custom_vehicle_list.append(
+                (v['name'], v['capacity'], charge_percent, str(v['speed']))
+            )
+        
         # Tüm araçları birleştir
-        all_vehicles = default_vehicles + [
-            (v['name'], v['capacity'], v['charge'], str(v['speed']))
-            for v in self.custom_vehicles
-        ]
+        all_vehicles = default_vehicles + custom_vehicle_list
         
         # Butonları oluştur
         for i, vehicle in enumerate(all_vehicles):
-            name, capacity, charge, speed = vehicle
+            name, capacity, charge_percent, speed = vehicle
             row = i // 2
             col = i % 2
             
             btn = tk.Button(
                 self.button_frame,
                 text=f"{name}\n{capacity} kWh",
-                command=lambda c=capacity, ch=charge, s=speed: self.set_vehicle(c, ch, s),
+                command=lambda c=capacity, ch=charge_percent, s=speed: self.set_vehicle(c, ch, s),
                 bg="#2d3436",
                 fg="gray",
                 font=("Helvetica", 10, "bold"),
@@ -657,9 +668,15 @@ class EVChargingCalculator:
         )
         label.pack(fill="x")
         
+        # Yüzde göstergesi için özel format
+        if "%" in label_text:
+            value_text = f"{variable.get():.0f}%"
+        else:
+            value_text = f"{variable.get():.1f}"
+        
         value_label = tk.Label(
             frame,
-            text=f"{variable.get():.1f}",
+            text=value_text,
             font=("Helvetica", 14, "bold"),
             bg="#16213e",
             fg=color,
@@ -681,26 +698,29 @@ class EVChargingCalculator:
             sliderlength=30,
             sliderrelief="flat",
             activebackground=color,
-            command=lambda x: self.on_slider_change(value_label, variable, color)
+            command=lambda x: self.on_slider_change(value_label, variable, color, "%" in label_text)
         )
         slider.pack(fill="x", pady=5)
         
         return slider
         
-    def on_slider_change(self, label, variable, color):
-        label.config(text=f"{variable.get():.1f}")
+    def on_slider_change(self, label, variable, color, is_percent=False):
+        if is_percent:
+            label.config(text=f"{variable.get():.0f}%")
+        else:
+            label.config(text=f"{variable.get():.1f}")
         self.update_display()
         
-    def set_vehicle(self, capacity, charge, speed):
+    def set_vehicle(self, capacity, charge_percent, speed):
         self.battery_capacity.set(capacity)
-        self.current_charge.set(charge)
+        self.current_charge_percent.set(charge_percent)
         self.charging_speed.set(speed)
         self.update_display()
         
     def update_display(self):
         try:
             capacity = self.battery_capacity.get()
-            current = self.current_charge.get()
+            charge_percent = self.current_charge_percent.get()
             speed = float(self.charging_speed.get())
             
             if speed <= 0:
@@ -709,13 +729,11 @@ class EVChargingCalculator:
         except:
             return
         
-        # Mevcut şarjı kapasiteye göre sınırla
-        if current > capacity:
-            current = capacity
-            self.current_charge.set(current)
+        # Yüzdeyi kWh'ye çevir
+        current = (charge_percent / 100) * capacity
         
         # Hesaplamalar
-        percentage = (current / capacity) * 100
+        percentage = charge_percent
         remaining = capacity - current
         
         if remaining <= 0:
@@ -740,7 +758,7 @@ class EVChargingCalculator:
         self.draw_battery(percentage, color)
         
         # Yüzde göster
-        self.percentage_label.config(text=f"{percentage:.1f}%", fg=color)
+        self.percentage_label.config(text=f"{percentage:.0f}%", fg=color)
         
         # Enerji bilgisi
         self.energy_label.config(text=f"{current:.1f} / {capacity:.1f} kWh")
@@ -813,4 +831,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    #made by yaman alparslan
+    #Yaman Alparslan%
